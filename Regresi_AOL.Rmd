@@ -1,0 +1,231 @@
+---
+title: "AOL"
+author: "Kelompok 3"
+date: "2023-10-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+pacman::p_load(car, lmtest, nortest, lmridge, robustbase, performance, orcutt)
+```
+
+
+```{r}
+data <- read.csv("C:/Users/Alisha Zahra/Documents/Kuliah/SEMESTER 5/Regression Analysis/AOL/dataset.csv", header = T)
+data
+```
+
+```{r}
+str(data)
+```
+
+```{r}
+
+summary(data)
+```
+```{r}
+library("GGally")
+  
+ggpairs(data,                 # Data frame
+        columns = 2:4,
+        )
+
+# plot(data$HDI, data$WFP)
+
+```
+
+```{r}
+mod1 <- lm(HDI ~ WFP, data=data)
+mod2 <- lm(HDI ~ HSC, data=data)
+mod3 <- lm(HDI ~ WFP+HSC, data=data)
+
+BIC(mod1)
+BIC(mod2)
+BIC(mod3)
+```
+
+
+```{r}
+# model <- lm(IPM ~.-Provinsi, data=data)
+model <- lm(HDI ~ WFP+HSC, data=data)
+summary(model)
+
+error <- resid(model)
+
+# 2. Asumsi Residual (IIDN)
+# - Identik
+# - Independen
+# - Berdistribusi Normal (tidak ada outlier)
+# - Tidak boleh ada multikolinearitas (khusus regresi ganda)
+
+# Asumsi Distribusi Normal
+library(nortest)
+lillie.test(error)
+#   H0 : Error  terdistribusi normal
+#   H1 : Error tidak terdistribusi normal
+
+# Asumsi Identik (Homoskedastis)
+library(lmtest)
+bptest(model)
+#   H0 : error memiliki variance konstan (homoskedastis)
+#   H1 : error tidak memiliki variance constant (heteroskedastis)
+
+# Asumsi Independen (autokolerasi)
+dwtest(model)
+#   H0 : Error tidak berautokolerasi
+#   H1 : Error berautokolerasi
+
+# Asumsi Multikolinearitas
+library(car)
+car::vif(model)
+#   vif > 10 : terjadi multikolinear
+
+# 3. Uji F
+# 4. Uji T
+# Uji Kolomogorv-Smirnov
+# Uji Shapiro Wilk
+# Uji Anderson Darling
+```
+```{r}
+model <- lm(formula=IPM ~ .-Provinsi-ProporsiLI-Bruto, data=data)
+step <- step(model)
+```
+
+
+```{r}
+# model <- lm(formula=IPM ~ PenyelesaianSMA+PersentaseTenagaKerja, data=data)
+# step <- step(model, direction="forward", scope =  ~  PersentasePenduduk + Lapangankerja + RasioPenggunaanGasRT + 
+#     IDI + PersentaseTenagaKerja + Bruto + PersentaseTS + 
+#     JumlahSMA + PenyelesaianSMA + Kepadatan)
+```
+
+
+```{r}
+error <- resid(model)
+
+# 2. Asumsi Residual (IIDN)
+# - Identik
+# - Independen
+# - Berdistribusi Normal (tidak ada outlier)
+# - Tidak boleh ada multikolinearitas (khusus regresi ganda)
+
+# Asumsi Distribusi Normal
+library(nortest)
+lillie.test(error)
+#   H0 : Error  terdistribusi normal
+#   H1 : Error tidak terdistribusi normal
+
+# Asumsi Identik (Homoskedastis)
+library(lmtest)
+bptest(model)
+#   H0 : error memiliki variance konstan (homoskedastis)
+#   H1 : error tidak memiliki variance constant (heteroskedastis)
+?dwtest
+# Asumsi Independen (autokolerasi)
+dwtest(model)
+#   H0 : Error tidak berautokolerasi
+#   H1 : Error berautokolerasi
+
+# Asumsi Multikolinearitas
+library(car)
+car::vif(model)
+#   vif > 10 : terjadi multikolinear
+
+# 3. Uji F
+# 4. Uji T
+# Uji Kolomogorv-Smirnov
+# Uji Shapiro Wilk
+# Uji Anderson Darling
+```
+
+```{r}
+# Independency
+morcutt <- cochrane.orcutt(model, convergence = 8, max.iter = 100)
+summary(morcutt)
+
+?BIC
+```
+
+
+
+
+
+```{r}
+e <- resid(morcutt)
+
+shapiro.test(e)
+
+```
+
+
+
+```{r}
+dwtest(morcutt)
+
+```
+
+```{r}
+bptest(morcutt)
+
+```
+
+
+```{r}
+car::vif(morcutt)
+
+```
+
+# GLS
+
+```{r}
+library(nlme)  # for gls function
+library(sandwich)  # for robust standard errors
+
+gls_model <- gls(HDI ~ WFP + HSC, correlation = corAR1(form = ~ 1), data = data)
+summary(gls_model)
+```
+```{r}
+v <- gls_model$residuals
+attr(v, "std") <- NULL
+durbinWatsonTest(v)
+```
+
+```{r}
+car::vif(gls_model)
+```
+
+
+```{r}
+acf(residuals(gls_model), lag.max = 20)
+```
+
+
+
+# GWR
+
+```{r}
+library(spgwr)
+library(sp)
+library(rgeos)
+library(sf)
+```
+
+```{r}
+library(sf)
+
+col.d <- gwr.sel(HDI ~ WFP + HSC, data=data, coords=cbind(data$latitude, data$longitude),gweight=gwr.bisquare)
+
+gwr.model <- gwr(HDI ~ WFP + HSC, data=data, 
+                    coords=cbind(data$latitude, data$longitude),
+                    gweight=gwr.bisquare,
+                    bandwidth=col.d,
+                    hatmatrix=TRUE)
+gwr.model
+
+gwr.model$SDF
+```
+
